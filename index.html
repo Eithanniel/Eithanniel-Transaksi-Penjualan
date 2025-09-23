@@ -2,24 +2,84 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Toko Online</title>
+  <title>Tokopeedia</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* wrapper keeps the badge out of the document flow */
+.card-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Absolute pulsing badge (won't change layout) */
+.best-selling {
+  position: absolute;
+  top: -12px;                 /* sits above the card */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: linear-gradient(90deg,#ff6a00,#ffb347);
+  padding: 4px 10px;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  animation: pulseText 1.5s infinite ease-in-out;
+  pointer-events: none;       /* badge won't block clicks */
+}
+
+/* pulse keyframes for badge */
+@keyframes pulseText {
+  0%,100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  50%     { transform: translateX(-50%) scale(1.25); opacity: 0.85; }
+}
+
+/* chroma-body (keeps aura behind text) */
+.chroma-body {
+  position: relative;
+  z-index: 1;                 /* creates stacking context so ::before sits behind content */
+}
+
+.chroma-body::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 8px;
+  background: conic-gradient(
+    from 0deg,
+    red, orange, yellow, lime, cyan, blue, violet, red
+  );
+  filter: blur(10px);
+  z-index: -1;
+  pointer-events: none;
+  animation: chromaSpin 6s linear infinite;
+}
+
+@keyframes chromaSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+
+</style>
+
+
 </head>
-<body class="p-4 bg-light">
+<body class="p-4 bg-primary bg-opacity-50">
 
   <div class="container">
     <h2 class="text-center mb-4">🛍️ Transaksi Penjualan</h2>
 
     <!-- Produk List -->
-    <div id="produkGrid" class="row g-3 mb-5"></div>
+    <div id="produkGrid" class="row g-4 mb-5"></div>
 
     <!-- Keranjang -->
     <h4>🛒 Keranjang Belanja</h4>
     <table class="table table-bordered bg-white">
       <thead>
-        <tr>
+        <tr class = "table-info">
           <th>Produk</th>
           <th>Jumlah</th>
           <th>Harga</th>
@@ -29,8 +89,8 @@
       </thead>
       <tbody id="keranjangList"></tbody>
       <tfoot>
-        <tr>
-          <td colspan="3" class="text-end"><b>Total</b></td>
+        <tr class = "table-success">
+          <td colspan="3" class="text-end "><b>Total</b></td>
           <td colspan="2" id="totalHarga"><b>Rp 0</b></td>
         </tr>
       </tfoot>
@@ -63,52 +123,72 @@
     renderProduk();
   }
 
-  // Tampilkan produk dalam card
-  function renderProduk() {
-    const grid = document.getElementById("produkGrid");
-    grid.innerHTML = "";
-    produkData.forEach(item => {
-      let col = document.createElement("div");
-      col.className = "col-md-3";
-      col.innerHTML = `
+ function renderProduk() {
+  const grid = document.getElementById("produkGrid");
+  grid.innerHTML = "";
+  produkData.forEach(item => {
+    let col = document.createElement("div");
+    // make column a flex container so cards stretch to same height
+    col.className = "col-md-3 d-flex";
+
+    const isSecret = item.kategori === "secret";
+
+    col.innerHTML = `
+      <div class="card-wrap w-100">
+        ${isSecret ? '<div class="best-selling">🔥 Best Selling!</div>' : ''}
         <div class="card h-100 shadow-sm">
           <img src="${item.gambar || 'https://via.placeholder.com/200'}" class="card-img-top" alt="${item.nama}">
-          <div class="card-body d-flex flex-column">
+          <div class="card-body d-flex flex-column ${isSecret ? 'chroma-body' : ''}">
             <h6 class="card-title">${item.nama}</h6>
             <p class="mb-1 text-muted">Rp ${Number(item.harga).toLocaleString()}</p>
+            <p class="mb-1"><b>Stock:</b> ${item.stok}</p>
             <input type="number" min="1" value="1" class="form-control mb-2" id="qty-${item.id}">
             <button class="btn btn-primary mt-auto" onclick="tambahKeranjang(${item.id})">Add to Cart</button>
           </div>
         </div>
-      `;
-      grid.appendChild(col);
-    });
+      </div>
+    `;
+    grid.appendChild(col);
+  });
+}
+
+
+function tambahKeranjang(idProduk) {
+  let produk = produkData.find(p => p.id == idProduk);
+  let qtyInput = document.getElementById("qty-" + idProduk);
+  let jumlah = parseInt(qtyInput.value);
+
+  if (!jumlah || jumlah <= 0) {
+    Swal.fire("Oops!", "Jumlah harus lebih dari 0", "warning");
+    return;
   }
 
-  // Tambahkan ke keranjang
-  function tambahKeranjang(idProduk) {
-    let produk = produkData.find(p => p.id == idProduk);
-    let qtyInput = document.getElementById("qty-" + idProduk);
-    let jumlah = parseInt(qtyInput.value);
-    if (!jumlah || jumlah <= 0) {
-      Swal.fire("Oops!", "Jumlah harus lebih dari 0", "warning");
+  // ✅ Cek stok
+  if (jumlah > produk.stok) {
+    Swal.fire("Oops!", `Stock hanya ${produk.stok}, kamu pesan ${jumlah}!`, "error");
+    return;
+  }
+
+  let existing = keranjang.find(item => item.id === idProduk);
+  if (existing) {
+    if (existing.jumlah + jumlah > produk.stok) {
+      Swal.fire("Oops!", `Stock hanya ${produk.stok}, kamu sudah ambil ${existing.jumlah}!`, "error");
       return;
     }
-    let existing = keranjang.find(item => item.id === idProduk);
-    if (existing) {
-      existing.jumlah += jumlah;
-      existing.subtotal = existing.jumlah * existing.harga;
-    } else {
-      keranjang.push({
-        id: produk.id,
-        nama: produk.nama,
-        harga: produk.harga,
-        jumlah,
-        subtotal: produk.harga * jumlah
-      });
-    }
-    renderKeranjang();
+    existing.jumlah += jumlah;
+    existing.subtotal = existing.jumlah * existing.harga;
+  } else {
+    keranjang.push({
+      id: produk.id,
+      nama: produk.nama,
+      harga: produk.harga,
+      jumlah,
+      subtotal: produk.harga * jumlah
+    });
   }
+  renderKeranjang();
+}
+
 
   // Render isi keranjang
   function renderKeranjang() {
@@ -135,29 +215,67 @@
     renderKeranjang();
   }
 
-  // Simpan transaksi
-  async function simpanTransaksi() {
-    if (keranjang.length === 0) {
-      Swal.fire("Oops!", "Keranjang masih kosong", "warning");
-      return;
-    }
-    const { error } = await db.from("transaksi").insert([
-      {
-        tanggal: new Date().toISOString(),
-        items: keranjang,
-        total: keranjang.reduce((a,b)=>a+b.subtotal,0)
-      }
-    ]);
-    if (error) {
-      Swal.fire("Error", "Gagal menyimpan transaksi: " + error.message, "error");
-      return;
-    }
-    Swal.fire("Sukses", "Transaksi berhasil disimpan", "success");
-    keranjang = [];
-    renderKeranjang();
+// Simpan transaksi
+async function simpanTransaksi() {
+  if (keranjang.length === 0) {
+    Swal.fire("Oops!", "Keranjang masih kosong", "warning");
+    return;
   }
 
-  loadProduk();
+  // ✅ Cek stok terbaru dari database (biar aman)
+  for (let item of keranjang) {
+    let { data: produk, error } = await db.from("produk").select("stok").eq("id", item.id).single();
+    if (error) {
+      Swal.fire("Error", "Gagal cek stok: " + error.message, "error");
+      return;
+    }
+    if (!produk || item.jumlah > produk.stok) {
+      Swal.fire("Oops!", `${item.nama} hanya sisa ${produk.stok}, tapi kamu pesan ${item.jumlah}`, "error");
+      return;
+    }
+  }
+
+  // ✅ Simpan transaksi
+  const { error: insertError } = await db.from("transaksi").insert([{
+    tanggal: new Date().toISOString(),
+    items: keranjang,
+    total: keranjang.reduce((a, b) => a + b.subtotal, 0)
+  }]);
+
+  if (insertError) {
+    Swal.fire("Error", "Gagal menyimpan transaksi: " + insertError.message, "error");
+    return;
+  }
+
+// ✅ Update stok setiap produk
+for (let item of keranjang) {
+  // ambil stok terbaru dulu
+  let { data: produk, error: getError } = await db.from("produk").select("stok").eq("id", item.id).single();
+  if (getError) {
+    Swal.fire("Error", "Gagal ambil stok: " + getError.message, "error");
+    return;
+  }
+
+  let stokBaru = produk.stok - item.jumlah;
+
+  const { error: updateError } = await db
+    .from("produk")
+    .update({ stok: stokBaru })
+    .eq("id", item.id);
+
+  if (updateError) {
+    Swal.fire("Error", `Gagal update stok untuk ${item.nama}: ` + updateError.message, "error");
+    return;
+  }
+}
+
+
+  Swal.fire("Sukses", "Transaksi berhasil disimpan & stok diperbarui", "success");
+  keranjang = [];
+  renderKeranjang();
+  loadProduk(); 
+}
+loadProduk()
 </script>
 </body>
 </html>
