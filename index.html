@@ -30,6 +30,22 @@
   animation: pulseText 1.5s infinite ease-in-out;
   pointer-events: none;       /* badge won't block clicks */
 }
+.sold-out {
+  position: absolute;
+  top: -12px;                 /* sits above the card */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: linear-gradient(90deg,#ff0000,#ff9909);
+  padding: 4px 10px;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  animation: pulseText 1.5s infinite ease-in-out;
+  pointer-events: none;       /* badge won't block clicks */
+}
 
 /* pulse keyframes for badge */
 @keyframes pulseText {
@@ -132,10 +148,12 @@
     col.className = "col-md-3 d-flex";
 
     const isSecret = item.kategori === "secret";
+    const isSoldOut = item.stok === 0;
 
     col.innerHTML = `
       <div class="card-wrap w-100">
         ${isSecret ? '<div class="best-selling">🔥 Best Selling!</div>' : ''}
+        ${isSoldOut ? '<div class="sold-out">😞Sold Out! 😞</div>' : ""}
         <div class="card h-100 shadow-sm">
           <img src="${item.gambar || 'https://via.placeholder.com/200'}" class="card-img-top" alt="${item.nama}">
           <div class="card-body d-flex flex-column ${isSecret ? 'chroma-body' : ''}">
@@ -234,6 +252,7 @@ async function simpanTransaksi() {
       return;
     }
   }
+  renderProduk()
 
   // ✅ Simpan transaksi
   const { error: insertError } = await db.from("transaksi").insert([{
